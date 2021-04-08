@@ -33,6 +33,11 @@ get '/login' do
   erb :login
 end
 
+get '/logout' do
+  session.delete(:spotify_user_id)
+  redirect '/login'
+end
+
 get '/jobs/update' do
   # Update each user's DW Dedupe
   users.get.each do |user_doc|

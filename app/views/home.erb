@@ -1,3 +1,11 @@
-<a href="http://open.spotify.com/user/spotify/playlist/<%= @user['dw_dedupe_id'] %>">
-  <button>Go to your DW Dedupe</button>
-</a>
+<main>
+  <p>Hey <%= @user['display_name'] %> 👋</p>
+
+  <form action="http://open.spotify.com/user/spotify/playlist/<%= @user['dw_dedupe_id'] %>">
+    <button type="submit">Go to your DW Dedupe</button>
+  </form>
+
+  <form action="/logout">
+    <button type="submit">Log Out</button>
+  </form>
+</main>
