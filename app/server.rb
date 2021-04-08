@@ -20,6 +20,8 @@ error do |error|
   erb :error
 end
 
+get('/ping') { 'pong' }
+
 get '/' do
   require_user!
   erb :home
