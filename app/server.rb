@@ -3,6 +3,7 @@ require 'sinatra'
 require 'google/cloud/firestore'
 require 'active_support'
 require 'active_support/core_ext/hash'
+require_relative 'app_config'
 require_relative 'spotify'
 
 if development?
@@ -18,7 +19,9 @@ error do |error|
   erb :error
 end
 
-get('/ping') { 'pong' }
+get '/ping' do
+  'pong'
+end
 
 get '/' do
   require_user!
@@ -78,6 +81,26 @@ get Spotify::CALLBACK_PATH do
 end
 
 helpers do
+  def config
+    @config ||= AppConfig.new(environment: settings.environment, port: settings.port)
+  end
+
+  def spotify
+    @spotify ||= Spotify.new(config)
+  end
+
+  def firestore
+    @firestore ||= Google::Cloud::Firestore.new
+  end
+
+  def users
+    @users ||= firestore.collection("#{collection_prefix}.users")
+  end
+
+  def collection_prefix
+    @collection_prefix ||= settings.development? ? "development.#{`whoami`.chomp}" : 'production'
+  end
+
   def require_user!
     redirect '/login' unless session.key?(:spotify_user_id)
 
@@ -106,21 +129,5 @@ helpers do
     logger.error "Spotify authorization error", error: params[:error]
     @message = "Spotify authorization error"
     erb :error
-  end
-
-  def spotify
-    @spotify ||= Spotify.new(settings)
-  end
-
-  def firestore
-    @firestore ||= Google::Cloud::Firestore.new
-  end
-
-  def users
-    @users ||= firestore.collection("#{collection_prefix}.users")
-  end
-
-  def collection_prefix
-    @collection_prefix ||= settings.development? ? "development.#{`whoami`.chomp}" : 'production'
   end
 end

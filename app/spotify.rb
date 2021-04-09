@@ -1,22 +1,22 @@
 require 'httparty'
 require 'json'
+require_relative 'spotify_client'
 
 class Spotify
   ALPHABET = ('a'..'z').to_a.freeze
   REDIRECT_PATH = '/spotify/authorize/redirect'.freeze
   CALLBACK_PATH = '/spotify/authorize/callback'.freeze
-  CLIENT_ID = ENV.fetch('SPOTIFY_CLIENT_ID').freeze
-  CLIENT_SECRET = ENV.fetch('SPOTIFY_CLIENT_SECRET').freeze
-  HOSTNAME = ENV.fetch('HOSTNAME', 'localhost').freeze
   SCOPES = 'playlist-read-private playlist-modify-private'.freeze
 
-  attr_reader :development
-  attr_reader :port
-  alias development? development
-
-  def initialize(sinatra_settings)
-    @development = sinatra_settings.development?
-    @port = sinatra_settings.port
+  def initialize(app_config)
+    @client_id = app_config.spotify_client_id
+    @development = app_config.development?
+    @callback_uri = "#{app_config.base_url}#{CALLBACK_PATH}"
+    @client = SpotifyClient.new(
+      app_config.spotify_client_id,
+      app_config.spotify_client_secret,
+      callback_uri
+    )
   end
 
   def dw_dedupe_playlist_name
@@ -28,19 +28,19 @@ class Spotify
   end
 
   def redirect_uri(state)
-    "https://accounts.spotify.com/authorize?#{redirect_query(state)}"
+    "#{SpotifyClient::ACCOUNTS_BASE_URL}/authorize?#{redirect_query(state)}"
   end
 
   def user_from_code(code)
-    auth_response = fetch_tokens(code)
-    user_info = fetch_user_info(auth_response['access_token'])
+    auth_response = client.access_token_from_code(code)
+    user_info = client.get_user_info(auth_response['access_token'])
 
-    user_info.to_h.merge('credentials' => auth_response.to_h)
+    user_info.merge('credentials' => auth_response)
   end
 
   def refresh_token!(user)
-    response = fetch_refreshed_access_token(user.dig('credentials', 'refresh_token'))
-    user['credentials'].merge!(response.to_h)
+    response = client.access_token_from_refresh_token(user.dig('credentials', 'refresh_token'))
+    user['credentials'].merge!(response)
   end
 
   def set_discover_weekly!(user)
@@ -53,34 +53,37 @@ class Spotify
   def update_dw_dedupe!(user)
     suggested_track_ids = Set.new(user.fetch('track_ids', []))
 
-    discover_weekly = fetch_playlist(token_for(user), user['discover_weekly_id'])
-    raise "unable to find Discover Weekly with id '#{user['discover_weekly_id']}'" unless response_ok?(discover_weekly)
-
+    discover_weekly = client.get_playlist(token_for(user), user['discover_weekly_id'])
     discover_weekly_track_ids = discover_weekly.dig('tracks', 'items').map { |pl_track| pl_track.dig('track', 'id') }
     new_track_ids = discover_weekly_track_ids.reject { |track_id| suggested_track_ids.include?(track_id) }
     suggested_track_ids.merge(discover_weekly_track_ids)
 
-    dw_dedupe = fetch_playlist(token_for(user), user['dw_dedupe_id'])
-    unless response_ok?(dw_dedupe)
+    begin
+      dw_dedupe = client.get_playlist(token_for(user), user['dw_dedupe_id'])
+    rescue StandardError
       dw_dedupe = upsert_dw_dedupe(user)
-      raise "unable to upsert '#{dw_dedupe_playlist_name}'" unless dw_dedupe
-      
       user['dw_dedupe_id'] = dw_dedupe['id']
     end
 
     dw_dedupe_track_ids = dw_dedupe.dig('tracks', 'items').map { |pl_track| pl_track.dig('track', 'id') }
-    remove_tracks_from_playlist(token_for(user), user['dw_dedupe_id'], dw_dedupe_track_ids)
-    add_tracks_to_playlist(token_for(user), user['dw_dedupe_id'], new_track_ids)
+    client.remove_tracks_from_playlist(token_for(user), user['dw_dedupe_id'], dw_dedupe_track_ids)
+    client.add_tracks_to_playlist(token_for(user), user['dw_dedupe_id'], new_track_ids)
 
     user['track_ids'] = suggested_track_ids.to_a
   end
 
   private
 
+  attr_reader :client_id
+  attr_reader :development
+  attr_reader :callback_uri
+  attr_reader :client
+  alias development? development
+
   def find_discover_weekly(user)
     offset = 0
     loop do
-      response = fetch_user_playlists(token_for(user), limit: 50, offset: offset)
+      response = client.get_user_playlists(token_for(user), offset: offset)
       playlists = response['items']
       return nil if playlists.empty?
 
@@ -95,7 +98,7 @@ class Spotify
   def find_dw_dedupe(user)
     offset = 0
     loop do
-      response = fetch_user_playlists(token_for(user), limit: 50, offset: offset)
+      response = client.get_user_playlists(token_for(user), offset: offset)
       playlists = response['items']
       return nil if playlists.empty?
 
@@ -111,104 +114,20 @@ class Spotify
     existing_dw_dedupe = find_dw_dedupe(user)
     return existing_dw_dedupe if existing_dw_dedupe
 
-    new_dw_dedupe = create_playlist(token_for(user), user['id'], dw_dedupe_playlist_name)
-    response_ok?(new_dw_dedupe) ? new_dw_dedupe : nil
+    client.create_playlist(token_for(user), user['id'], dw_dedupe_playlist_name)
   end
 
   def token_for(user)
     user.dig('credentials', 'access_token')
   end
 
-  def response_ok?(response)
-    response.code.to_s.start_with?('2')
-  end
-
-  def fetch_tokens(code)
-    HTTParty.post(
-      'https://accounts.spotify.com/api/token',
-      headers: basic_auth_headers,
-      body: URI.encode_www_form(grant_type: :authorization_code, code: code, redirect_uri: callback_uri)
-    )
-  end
-
-  def fetch_refreshed_access_token(refresh_token)
-    HTTParty.post(
-      'https://accounts.spotify.com/api/token',
-      headers: basic_auth_headers,
-      body: URI.encode_www_form(grant_type: :refresh_token, refresh_token: refresh_token)
-    )
-  end
-
-  def fetch_user_info(access_token)
-    HTTParty.get('https://api.spotify.com/v1/me', headers: bearer_auth_headers(access_token))
-  end
-
-  def fetch_user_playlists(access_token, limit: 50, offset: 0)
-    HTTParty.get(
-      'https://api.spotify.com/v1/me/playlists',
-      headers: bearer_auth_headers(access_token),
-      query: { limit: limit, offset: offset }
-    )
-  end
-
-  def create_playlist(access_token, user_id, playlist_name)
-    HTTParty.post(
-      "https://api.spotify.com/v1/users/#{user_id}/playlists",
-      headers: bearer_auth_headers(access_token),
-      body: { name: playlist_name, public: false }.to_json
-    )
-  end
-
-  def fetch_playlist(access_token, playlist_id)
-    HTTParty.get(
-      "https://api.spotify.com/v1/playlists/#{playlist_id}",
-      headers: bearer_auth_headers(access_token),
-    )
-  end
-
-  def remove_tracks_from_playlist(access_token, playlist_id, track_ids)
-    HTTParty.delete(
-      "https://api.spotify.com/v1/playlists/#{playlist_id}/tracks",
-      headers: bearer_auth_headers(access_token),
-      body: { tracks: track_ids.map { |track_id| { uri: "spotify:track:#{track_id}" } } }.to_json
-    )
-  end
-
-  def add_tracks_to_playlist(access_token, playlist_id, track_ids)
-    HTTParty.post(
-      "https://api.spotify.com/v1/playlists/#{playlist_id}/tracks",
-      headers: bearer_auth_headers(access_token),
-      body: { uris: track_ids.map { |track_id| "spotify:track:#{track_id}" } }.to_json
-    )
-  end
-
-  def bearer_auth_headers(access_token)
-    { Authorization: "Bearer #{access_token}" }
-  end
-
-  def basic_auth_headers
-    @basic_auth_headers ||= { Authorization: "Basic #{encoded_api_keys}" }
-  end
-
-  def encoded_api_keys
-    @encoded_api_keys ||= Base64.urlsafe_encode64("#{CLIENT_ID}:#{CLIENT_SECRET}")
-  end
-
   def redirect_query(state)
     URI.encode_www_form(
       response_type: :code,
-      client_id: CLIENT_ID,
+      client_id: client_id,
       state: state,
       scope: SCOPES,
       redirect_uri: callback_uri
     )
-  end
-
-  def callback_uri
-    @spotify_callback_uri ||= "#{base_url}#{CALLBACK_PATH}"
-  end
-
-  def base_url
-    @base_url ||= development? ? "http://#{HOSTNAME}:#{port}" : "https://#{HOSTNAME}"
   end
 end
