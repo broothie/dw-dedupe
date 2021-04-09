@@ -19,6 +19,10 @@ class Spotify
     @port = sinatra_settings.port
   end
 
+  def dw_dedupe_playlist_name
+    development? ? 'DW Dedupe - dev' : 'DW Dedupe'
+  end
+
   def new_state(length = 32)
     Array.new(length) { ALPHABET.sample }.join
   end
@@ -39,31 +43,30 @@ class Spotify
     user['credentials'].merge!(response.to_h)
   end
 
-  def get_playlist_ids(user)
+  def set_discover_weekly!(user)
     discover_weekly = find_discover_weekly(user)
     raise 'no discover weekly found' unless discover_weekly
 
-    dw_dedupe = upsert_dw_dedupe(user)
-
-    {
-      'discover_weekly_id' => discover_weekly['id'],
-      'dw_dedupe_id' => dw_dedupe['id']
-    }
+    user['discover_weekly_id'] = discover_weekly['id']
   end
 
   def update_dw_dedupe!(user)
     suggested_track_ids = Set.new(user.fetch('track_ids', []))
 
-    discover_weekly = fetch_playlist(pluck_token(user), user['discover_weekly_id'])
+    discover_weekly = fetch_playlist(token_for(user), user['discover_weekly_id'])
     discover_weekly_track_ids = discover_weekly.dig('tracks', 'items').map { |pl_track| pl_track.dig('track', 'id') }
     new_track_ids = discover_weekly_track_ids.reject { |track_id| suggested_track_ids.include?(track_id) }
     suggested_track_ids.merge(discover_weekly_track_ids)
 
-    dw_dedupe = fetch_playlist(pluck_token(user), user['dw_dedupe_id'])
-    dw_dedupe ||= upsert_dw_dedupe(user)
+    dw_dedupe = fetch_playlist(token_for(user), user['dw_dedupe_id'])
+    unless dw_dedupe
+      dw_dedupe = upsert_dw_dedupe(user)
+      user['dw_dedupe_id'] = dw_dedupe['id']
+    end
+
     dw_dedupe_track_ids = dw_dedupe.dig('tracks', 'items').map { |pl_track| pl_track.dig('track', 'id') }
-    remove_tracks_from_playlist(pluck_token(user), user['dw_dedupe_id'], dw_dedupe_track_ids)
-    add_tracks_to_playlist(pluck_token(user), user['dw_dedupe_id'], new_track_ids)
+    remove_tracks_from_playlist(token_for(user), user['dw_dedupe_id'], dw_dedupe_track_ids)
+    add_tracks_to_playlist(token_for(user), user['dw_dedupe_id'], new_track_ids)
 
     user['track_ids'] = suggested_track_ids.to_a
   end
@@ -73,7 +76,7 @@ class Spotify
   def find_discover_weekly(user)
     offset = 0
     loop do
-      response = fetch_user_playlists(pluck_token(user), limit: 50, offset: offset)
+      response = fetch_user_playlists(token_for(user), limit: 50, offset: offset)
       playlists = response['items']
       return nil if playlists.empty?
 
@@ -88,12 +91,12 @@ class Spotify
   def find_dw_dedupe(user)
     offset = 0
     loop do
-      response = fetch_user_playlists(pluck_token(user), limit: 50, offset: offset)
+      response = fetch_user_playlists(token_for(user), limit: 50, offset: offset)
       playlists = response['items']
       return nil if playlists.empty?
 
       playlists.each do |playlist|
-        return playlist.to_h if playlist['name'] == 'DW Dedupe' && playlist.dig('owner', 'id') == user['id']
+        return playlist.to_h if playlist['name'] == dw_dedupe_playlist_name && playlist.dig('owner', 'id') == user['id']
       end
 
       offset += 50
@@ -104,10 +107,10 @@ class Spotify
     existing_dw_dedupe = find_dw_dedupe(user)
     return existing_dw_dedupe if existing_dw_dedupe
 
-    create_playlist(pluck_token(user), user['id'], 'DW Dedupe')
+    create_playlist(token_for(user), user['id'], dw_dedupe_playlist_name)
   end
 
-  def pluck_token(user)
+  def token_for(user)
     user.dig('credentials', 'access_token')
   end
 

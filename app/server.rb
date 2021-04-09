@@ -5,8 +5,6 @@ require 'active_support'
 require 'active_support/core_ext/hash'
 require_relative 'spotify'
 
-puts environment: settings.environment
-
 if development?
   require 'sinatra/reloader'
   also_reload "#{__dir__}/*.rb"
@@ -71,8 +69,7 @@ get Spotify::CALLBACK_PATH do
 
   # Create user in db if not present
   unless users.doc(user['id']).get.exists?
-    playlist_ids = spotify.get_playlist_ids(user)
-    user.merge!(playlist_ids)
+    spotify.set_discover_weekly!(user)
     spotify.update_dw_dedupe!(user)
     users.doc(user['id']).set(user)
   end
