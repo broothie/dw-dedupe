@@ -54,13 +54,17 @@ class Spotify
     suggested_track_ids = Set.new(user.fetch('track_ids', []))
 
     discover_weekly = fetch_playlist(token_for(user), user['discover_weekly_id'])
+    raise "unable to find Discover Weekly with id '#{user['discover_weekly_id']}'" unless response_ok?(discover_weekly)
+
     discover_weekly_track_ids = discover_weekly.dig('tracks', 'items').map { |pl_track| pl_track.dig('track', 'id') }
     new_track_ids = discover_weekly_track_ids.reject { |track_id| suggested_track_ids.include?(track_id) }
     suggested_track_ids.merge(discover_weekly_track_ids)
 
     dw_dedupe = fetch_playlist(token_for(user), user['dw_dedupe_id'])
-    unless dw_dedupe
+    unless response_ok?(dw_dedupe)
       dw_dedupe = upsert_dw_dedupe(user)
+      raise "unable to upsert '#{dw_dedupe_playlist_name}'" unless dw_dedupe
+      
       user['dw_dedupe_id'] = dw_dedupe['id']
     end
 
@@ -107,11 +111,16 @@ class Spotify
     existing_dw_dedupe = find_dw_dedupe(user)
     return existing_dw_dedupe if existing_dw_dedupe
 
-    create_playlist(token_for(user), user['id'], dw_dedupe_playlist_name)
+    new_dw_dedupe = create_playlist(token_for(user), user['id'], dw_dedupe_playlist_name)
+    response_ok?(new_dw_dedupe) ? new_dw_dedupe : nil
   end
 
   def token_for(user)
     user.dig('credentials', 'access_token')
+  end
+
+  def response_ok?(response)
+    response.code.to_s.start_with?('2')
   end
 
   def fetch_tokens(code)
