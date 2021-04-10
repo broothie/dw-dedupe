@@ -8,19 +8,23 @@ require_relative 'spotify'
 
 if development?
   require 'sinatra/reloader'
-  also_reload "#{__dir__}/*.rb"
+  also_reload "#{__dir__}/**/*.rb"
 end
 
 set session_secret: ENV.fetch('SESSION_SECRET')
 enable :sessions
 
-error do |error|
-  @message = error.message
+error do
+  @message = env['sinatra.error'].message
   erb :error
 end
 
 get '/ping' do
   'pong'
+end
+
+get '/style.css' do
+  scss :style
 end
 
 get '/' do

@@ -1,3 +1,4 @@
 .env
 .byebug_history
 gcloud-key.json
+.sass-cache

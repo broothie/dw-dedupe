@@ -1,3 +1,9 @@
-<a href="<%= @redirect_path %>">
-  <button>Log In with Spotify</button>
-</a>
+<main class="login-page">
+  <div class="login zone">
+    <p>👋 Welcome to DW Dedupe. Please log in.</p>
+
+    <form action="<%= @redirect_path %>">
+      <button type="submit" class="button">Log In with Spotify</button>
+    </form>
+  </div>
+</main>
