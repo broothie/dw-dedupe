@@ -29,6 +29,11 @@ end
 
 get '/' do
   require_user!
+
+  if @user['latest_repeat_ids'].present?
+    @latest_repeats = spotify.client.get_tracks_info(spotify.token_for(@user), @user['latest_repeat_ids']).fetch('tracks')
+  end
+
   erb :home
 end
 

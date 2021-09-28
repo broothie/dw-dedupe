@@ -47,6 +47,14 @@ class SpotifyClient
     )
   end
 
+  def get_tracks_info(access_token, track_ids)
+    get(
+      "#{API_BASE_URL}/v1/tracks",
+      headers: bearer_auth_headers(access_token),
+      query: { ids: track_ids.join(',') }
+    )
+  end
+
   def get_playlist(access_token, playlist_id)
     get("#{API_BASE_URL}/v1/playlists/#{playlist_id}", headers: bearer_auth_headers(access_token))
   end

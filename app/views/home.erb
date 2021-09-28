@@ -12,4 +12,23 @@
       </form>
     </div>
   </div>
+
+  <% if @latest_repeats.present? %>
+    <div class="latest-repeats zone">
+      <p>This Week's Repeats</p>
+
+      <div class="song-grid">
+        <% @latest_repeats.each do |repeat| %>
+          <iframe
+            src="https://open.spotify.com/embed/track/<%= repeat['id'] %>"
+            width="300"
+            height="80"
+            frameborder="0"
+            allowtransparency="true"
+            allow="encrypted-media">
+          </iframe>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
 </main>
