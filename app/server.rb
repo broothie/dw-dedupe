@@ -3,6 +3,7 @@ require 'sinatra'
 require 'google/cloud/firestore'
 require 'active_support'
 require 'active_support/core_ext/hash'
+require 'json'
 require_relative 'app_config'
 require_relative 'spotify'
 
@@ -54,7 +55,6 @@ get '/jobs/update' do
     next unless user_doc.exists?
 
     user = user_doc.data&.deep_stringify_keys
-    logger.info user: user
 
     spotify.refresh_token!(user)
     spotify.update_dw_dedupe!(user)
@@ -110,6 +110,14 @@ helpers do
     @collection_prefix ||= settings.development? ? "development.#{`whoami`.chomp}" : 'production'
   end
 
+  def log(level, message, **kwargs)
+    logger.send(level, { message: message }.merge(kwargs).to_json)
+  end
+
+  %i[error info debug].each do |level|
+    define_method("log_#{level}") { |message, **kwargs| log level, message, **kwargs }
+  end
+
   def require_user!
     redirect '/login' unless session.key?(:spotify_user_id)
 
@@ -120,6 +128,7 @@ helpers do
     end
 
     @user = user.data&.deep_stringify_keys
+    spotify.refresh_token!(@user)
   end
 
   def require_state_match!
@@ -127,7 +136,7 @@ helpers do
     session_state = session.delete(:state)
     return if callback_state == session_state
 
-    logger.error "states don't match", callback_state: callback_state, session_state: session_state
+    log_error "states don't match", { callback_state: callback_state, session_state: session_state }
     @message = "States don't match"
     erb :error
   end
@@ -135,7 +144,7 @@ helpers do
   def require_no_spotify_error!
     return unless params.key?(:error)
 
-    logger.error "Spotify authorization error", error: params[:error]
+    log_error "Spotify authorization error", error: params[:error]
     @message = "Spotify authorization error"
     erb :error
   end
