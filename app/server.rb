@@ -30,12 +30,21 @@ end
 
 get '/' do
   require_user!
-
-  if @user['latest_repeat_ids'].present?
-    @latest_repeats = spotify.client.get_tracks_info(spotify.token_for(@user), @user['latest_repeat_ids']).fetch('tracks')
-  end
-
   erb :home
+end
+
+get '/history' do
+  require_user!
+
+  @history = spotify.client.get_tracks_info(spotify.token_for(@user), @user['track_ids']).fetch('tracks')
+  erb :history
+end
+
+get '/latest' do
+  require_user!
+
+  @latest = spotify.client.get_tracks_info(spotify.token_for(@user), @user['latest_repeat_ids']).fetch('tracks')
+  erb :latest
 end
 
 get '/login' do

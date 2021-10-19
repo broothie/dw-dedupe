@@ -1,0 +1,18 @@
+<main class="latest-page">
+  <p>This Week's Repeats <a href="/">back</a></p>
+
+  <div class="latest zone">
+    <div class="song-grid">
+      <% @latest.each do |track| %>
+        <iframe
+          src="https://open.spotify.com/embed/track/<%= track['id'] %>"
+          width="300"
+          height="80"
+          frameborder="0"
+          allowtransparency="true"
+          allow="encrypted-media">
+        </iframe>
+      <% end %>
+    </div>
+  </div>
+</main>

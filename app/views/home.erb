@@ -1,34 +1,19 @@
-<main class="home-page">
-  <div class="home zone">
+<main class="home-page page">
+  <div class="page-content home zone">
     <p>Hey <%= @user['display_name'] %> 👋</p>
 
     <div class="buttons row">
-      <form action="http://open.spotify.com/user/spotify/playlist/<%= @user['dw_dedupe_id'] %>">
-        <button type="submit" class="button">Go to your DW Dedupe</button>
-      </form>
+      <a href="http://open.spotify.com/user/spotify/playlist/<%= @user['dw_dedupe_id'] %>" class="button" target="_blank">Go to your DW Dedupe</a>
 
-      <form action="/logout">
-        <button type="submit" class="button">Log Out</button>
-      </form>
+      <a href="/history" class="button">All DW Dedupe history</a>
+
+      <% if @user['latest_repeat_ids'].present? %>
+        <a href="/latest" class="button"> <%= @user['latest_repeat_ids'].count %> filtered songs from your current DW Dedupe</a>
+      <% else %>
+        <a class="button disabled">No songs filtered this week</a>
+      <% end %>
+
+      <a href="/logout" class="button">Log Out</a>
     </div>
   </div>
-
-  <% if @latest_repeats.present? %>
-    <div class="latest-repeats zone">
-      <p>This Week's Repeats</p>
-
-      <div class="song-grid">
-        <% @latest_repeats.each do |repeat| %>
-          <iframe
-            src="https://open.spotify.com/embed/track/<%= repeat['id'] %>"
-            width="300"
-            height="80"
-            frameborder="0"
-            allowtransparency="true"
-            allow="encrypted-media">
-          </iframe>
-        <% end %>
-      </div>
-    </div>
-  <% end %>
 </main>

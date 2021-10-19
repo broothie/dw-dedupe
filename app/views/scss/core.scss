@@ -3,6 +3,7 @@ html, body {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
+  font-family: sans-serif;
 }
 
 .zone {
@@ -22,9 +23,16 @@ html, body {
   padding: 4px 6px;
   outline: none;
   cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  user-select: none;
+
+  &.disabled {
+    cursor: not-allowed;
+    color: gray;
+  }
 
   &:hover {
-    border-color: lightgray;
     box-shadow: 0 1px 3px 0 lightgray;
   }
 
