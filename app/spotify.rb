@@ -10,6 +10,7 @@ class Spotify
 
   attr_reader :client
 
+  # @param [Config] app_config
   def initialize(app_config)
     @client_id = app_config.spotify_client_id
     @development = app_config.development?
@@ -21,18 +22,25 @@ class Spotify
     )
   end
 
+  # @return [String]
   def dw_dedupe_playlist_name
     development? ? 'DW Dedupe - dev' : 'DW Dedupe'
   end
 
+  # @param [Integer] length
+  # @return [String]
   def new_state(length = 32)
     Array.new(length) { ALPHABET.sample }.join
   end
 
+  # @param [String] state
+  # @return [String]
   def redirect_uri(state)
     "#{SpotifyClient::ACCOUNTS_BASE_URL}/authorize?#{redirect_query(state)}"
   end
 
+  # @param [String] code
+  # @return [Hash]
   def user_from_code(code)
     auth_response = client.access_token_from_code(code)
     user_info = client.get_user_info(auth_response['access_token'])
@@ -40,11 +48,13 @@ class Spotify
     user_info.merge('credentials' => auth_response)
   end
 
+  # @param [Hash] user
   def refresh_token!(user)
     response = client.access_token_from_refresh_token(user.dig('credentials', 'refresh_token'))
     user['credentials'].merge!(response)
   end
 
+  # @param [Hash] user
   def set_discover_weekly!(user)
     discover_weekly = find_discover_weekly(user)
     raise 'no discover weekly found' unless discover_weekly
@@ -52,6 +62,7 @@ class Spotify
     user['discover_weekly_id'] = discover_weekly['id']
   end
 
+  # @param [Hash] user
   def update_dw_dedupe!(user)
     historical_tracks = Set.new(user.fetch('track_ids', []))
     discover_weekly = client.get_playlist(token_for(user), user['discover_weekly_id'])
@@ -75,6 +86,19 @@ class Spotify
     user['repeat_ids'] = Set.new(user.fetch('repeat_ids', [])).merge(repeats).to_a
   end
 
+  # @param [Hash] user
+  # @param [Array<String>] track_ids
+  def get_tracks_info(user, track_ids)
+    tracks = []
+    track_ids.each_slice(50) do |track_ids|
+      tracks += client.get_tracks_info(token_for(user), track_ids).fetch('tracks')
+    end
+
+    tracks
+  end
+
+  # @param [Hash] user
+  # @return [String]
   def token_for(user)
     user.dig('credentials', 'access_token')
   end
@@ -86,6 +110,8 @@ class Spotify
   attr_reader :callback_uri
   alias development? development
 
+  # @param [Hash] user
+  # @return [Hash, NilClass]
   def find_discover_weekly(user)
     offset = 0
     loop do
@@ -99,8 +125,12 @@ class Spotify
 
       offset += 50
     end
+
+    nil
   end
 
+  # @param [Hash] user
+  # @return [Hash, NilClass]
   def find_dw_dedupe(user)
     offset = 0
     loop do
@@ -114,8 +144,12 @@ class Spotify
 
       offset += 50
     end
+
+    nil
   end
 
+  # @param [Hash] user
+  # @return [Hash]
   def dw_dedupe(user)
     client.get_playlist(token_for(user), user['dw_dedupe_id'])
   rescue StandardError
@@ -125,6 +159,8 @@ class Spotify
     dw_dedupe
   end
 
+  # @param [Hash] user
+  # @return [Hash]
   def upsert_dw_dedupe(user)
     existing_dw_dedupe = find_dw_dedupe(user)
     return existing_dw_dedupe if existing_dw_dedupe
@@ -132,6 +168,8 @@ class Spotify
     client.create_playlist(token_for(user), user['id'], dw_dedupe_playlist_name)
   end
 
+  # @param [String] state
+  # @return [String]
   def redirect_query(state)
     URI.encode_www_form(
       response_type: :code,

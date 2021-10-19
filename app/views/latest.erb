@@ -1,18 +1,20 @@
-<main class="latest-page">
-  <p>This Week's Repeats <a href="/">back</a></p>
+<main class="history-page page">
+  <div class="page-content history">
+    <p>DW Dedupe History <a href="/">back</a></p>
 
-  <div class="latest zone">
-    <div class="song-grid">
-      <% @latest.each do |track| %>
-        <iframe
-          src="https://open.spotify.com/embed/track/<%= track['id'] %>"
-          width="300"
-          height="80"
-          frameborder="0"
-          allowtransparency="true"
-          allow="encrypted-media">
-        </iframe>
-      <% end %>
+    <div class="zone">
+      <div class="song-grid">
+        <% @latest.each do |track| %>
+          <iframe
+            src="https://open.spotify.com/embed/track/<%= track['id'] %>"
+            width="300"
+            height="80"
+            frameborder="0"
+            allowtransparency="true"
+            allow="encrypted-media">
+          </iframe>
+        <% end %>
+      </div>
     </div>
   </div>
 </main>

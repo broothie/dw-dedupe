@@ -36,14 +36,14 @@ end
 get '/history' do
   require_user!
 
-  @history = spotify.client.get_tracks_info(spotify.token_for(@user), @user['track_ids']).fetch('tracks')
+  @history = spotify.get_tracks_info(@user, @user['track_ids'])
   erb :history
 end
 
 get '/latest' do
   require_user!
 
-  @latest = spotify.client.get_tracks_info(spotify.token_for(@user), @user['latest_repeat_ids']).fetch('tracks')
+  @latest = spotify.get_tracks_info(@user, @user['latest_repeat_ids'])
   erb :latest
 end
 
